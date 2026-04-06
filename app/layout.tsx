@@ -14,7 +14,11 @@ export const metadata: Metadata = {
   description: 'Stay connected to your prayers with accurate times, Qibla direction, Hijri calendar, and spiritual guidance in multiple languages.',
   generator: 'v0.app',
   icons: {
-    icon: 'icon.svg',
+    icon: [
+      { url: 'icon-32.svg', sizes: '32x32', type: 'image/svg+xml' },
+      { url: 'icon-180.svg', sizes: '180x180', type: 'image/svg+xml' },
+      { url: 'icon.svg', type: 'image/svg+xml' },
+    ],
     apple: 'apple-icon.png',
   },
 }
