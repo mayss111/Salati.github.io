@@ -3,16 +3,19 @@ import { Inter, Amiri } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 
+const siteUrl = 'https://mayss111.github.io/Salati.github.io/'
+
 const _inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 const _amiri = Amiri({ weight: ["400", "700"], subsets: ["arabic", "latin"], variable: "--font-amiri" })
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: 'Salati - Prayer Times',
   description: 'Stay connected to your prayers with accurate times, Qibla direction, Hijri calendar, and spiritual guidance in multiple languages.',
   generator: 'v0.app',
   icons: {
-    icon: '/icon.svg',
-    apple: '/apple-icon.png',
+    icon: 'icon.svg',
+    apple: 'apple-icon.png',
   },
 }
 
