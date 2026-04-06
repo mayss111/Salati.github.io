@@ -17,7 +17,7 @@ type TrackerStore = {
 }
 
 export function PrayerTracker() {
-  const { t } = useLocale()
+  const { t, locale } = useLocale()
   const [completed, setCompleted] = useState<Record<string, boolean>>({})
   const [animate, setAnimate] = useState<string | null>(null)
   const [history, setHistory] = useState<Record<string, number>>({})
@@ -80,6 +80,21 @@ export function PrayerTracker() {
   const weeklyAverage = last7Days.length
     ? (last7Days.reduce((acc, val) => acc + val, 0) / last7Days.length).toFixed(1)
     : "0.0"
+
+  const statsLabels = {
+    en: { today: "Today", weekly: "7-day avg" },
+    fr: { today: "Aujourd'hui", weekly: "Moyenne 7 jours" },
+    ar: { today: "اليوم", weekly: "متوسط 7 أيام" },
+    tr: { today: "Bugun", weekly: "7 gun ort." },
+    ur: { today: "آج", weekly: "7 دن اوسط" },
+    es: { today: "Hoy", weekly: "Promedio 7 dias" },
+    de: { today: "Heute", weekly: "7-Tage-Schnitt" },
+    ms: { today: "Hari ini", weekly: "Purata 7 hari" },
+    id: { today: "Hari ini", weekly: "Rata-rata 7 hari" },
+    bn: { today: "আজ", weekly: "৭ দিনের গড়" },
+  } as const
+
+  const sl = statsLabels[locale]
 
   const radius = 46
   const circumference = 2 * Math.PI * radius
@@ -150,11 +165,11 @@ export function PrayerTracker() {
       <div className="mt-6">
         <div className="mb-3 grid grid-cols-2 gap-2">
           <div className="rounded-xl bg-muted/10 px-3 py-2 text-center">
-            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Today</p>
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{sl.today}</p>
             <p className="font-mono text-lg font-bold text-foreground">{completedCount}/{totalPrayers}</p>
           </div>
           <div className="rounded-xl bg-muted/10 px-3 py-2 text-center">
-            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">7-day avg</p>
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{sl.weekly}</p>
             <p className="font-mono text-lg font-bold text-primary">{weeklyAverage}</p>
           </div>
         </div>

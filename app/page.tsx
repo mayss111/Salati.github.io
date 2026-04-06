@@ -16,6 +16,7 @@ import {
   type PrayerCalculationOptions,
   type PrayerTimesData,
 } from "@/lib/prayer-times"
+import { getTranslation, type Locale } from "@/lib/i18n"
 
 const QiblaCompass = dynamic(() => import("@/components/qibla-compass").then((m) => m.QiblaCompass), {
   loading: () => <div className="h-[320px] rounded-3xl glass-strong" aria-hidden="true" />,
@@ -42,6 +43,12 @@ type AppPreferences = PrayerCalculationOptions & {
   reminderMinutes: number
 }
 
+type LocationErrorCode =
+  | "geolocation_unavailable"
+  | "permission_denied"
+  | "location_failed"
+  | "reverse_geocode_failed"
+
 const DEFAULT_PREFS: AppPreferences = {
   method: "mwl",
   madhhab: "shafi",
@@ -57,8 +64,9 @@ export default function PrayerTimesPage() {
   const [qiblaDirection, setQiblaDirection] = useState(0)
   const [nextPrayer, setNextPrayer] = useState("")
   const [locationLoading, setLocationLoading] = useState(false)
-  const [locationError, setLocationError] = useState<string | null>(null)
+  const [locationError, setLocationError] = useState<LocationErrorCode | null>(null)
   const [prefs, setPrefs] = useState<AppPreferences>(DEFAULT_PREFS)
+  const [activeLocale, setActiveLocale] = useState<Locale>("en")
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -71,6 +79,12 @@ export default function PrayerTimesPage() {
       } catch {
         // Ignore invalid local data and keep defaults.
       }
+    }
+
+    const savedLocale = globalThis?.localStorage?.getItem?.("salati-locale")
+    const allowed: Locale[] = ["en", "fr", "ar", "tr", "ur", "es", "de", "ms", "id", "bn"]
+    if (savedLocale && allowed.includes(savedLocale as Locale)) {
+      setActiveLocale(savedLocale as Locale)
     }
 
     const savedLocation = globalThis?.localStorage?.getItem?.("salati-location")
@@ -117,18 +131,20 @@ export default function PrayerTimesPage() {
     if (notificationDelay <= 0) return
 
     const timeout = setTimeout(() => {
+      const t = getTranslation(activeLocale)
+      const prayerName = (t[next.name as keyof typeof t] as string) || next.name
       new Notification("Salati", {
-        body: `Upcoming prayer: ${next.name.toUpperCase()} at ${next.time}`,
+        body: `${t.nextPrayer}: ${prayerName} (${next.time})`,
       })
     }, notificationDelay)
 
     return () => clearTimeout(timeout)
-  }, [prayerTimes, prefs.notificationsEnabled, prefs.reminderMinutes])
+  }, [prayerTimes, prefs.notificationsEnabled, prefs.reminderMinutes, activeLocale])
 
   const handleDetectLocation = useCallback(() => {
     setLocationError(null)
     if (!navigator.geolocation) {
-      setLocationError("Geolocation is not available in this browser.")
+      setLocationError("geolocation_unavailable")
       return
     }
     setLocationLoading(true)
@@ -156,7 +172,7 @@ export default function PrayerTimesPage() {
           setCity(`${cityName}, ${country}`)
         } catch {
           setCity(`${newLat.toFixed(2)}, ${newLng.toFixed(2)}`)
-          setLocationError("Location found, but city lookup failed. Showing coordinates instead.")
+          setLocationError("reverse_geocode_failed")
         }
         setLocationLoading(false)
       },
@@ -164,8 +180,8 @@ export default function PrayerTimesPage() {
         setLocationLoading(false)
         setLocationError(
           err.code === err.PERMISSION_DENIED
-            ? "Location permission denied."
-            : "Unable to detect your location right now."
+            ? "permission_denied"
+            : "location_failed"
         )
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }

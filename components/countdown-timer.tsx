@@ -71,7 +71,7 @@ export function CountdownTimer({ prayerTimes, onNextPrayerChange }: CountdownTim
       </h3>
 
       <p className="sr-only" aria-live="polite">
-        Next prayer {prayerLabel} at {nextPrayerTime}
+        {t.nextPrayer}: {prayerLabel} ({nextPrayerTime})
       </p>
 
       {/* Circular countdown */}
