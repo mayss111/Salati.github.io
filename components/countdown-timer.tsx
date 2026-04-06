@@ -70,6 +70,10 @@ export function CountdownTimer({ prayerTimes, onNextPrayerChange }: CountdownTim
         {prayerLabel}
       </h3>
 
+      <p className="sr-only" aria-live="polite">
+        Next prayer {prayerLabel} at {nextPrayerTime}
+      </p>
+
       {/* Circular countdown */}
       <div className="flex items-center justify-center">
         <div className="relative">

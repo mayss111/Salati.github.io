@@ -10,6 +10,7 @@ const _amiri = Amiri({ weight: ["400", "700"], subsets: ["arabic", "latin"], var
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
+  manifest: "manifest.webmanifest",
   title: 'Salati - Prayer Times',
   description: 'Stay connected to your prayers with accurate times, Qibla direction, Hijri calendar, and spiritual guidance in multiple languages.',
   generator: 'v0.app',

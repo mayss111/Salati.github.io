@@ -10,6 +10,21 @@ export interface PrayerTimesData {
   isha: string
 }
 
+export type CalculationMethod = "mwl" | "umm_al_qura" | "egyptian" | "karachi"
+export type Madhhab = "shafi" | "hanafi"
+
+export interface PrayerCalculationOptions {
+  method?: CalculationMethod
+  madhhab?: Madhhab
+}
+
+const METHOD_ANGLES: Record<CalculationMethod, { fajr: number; isha: number | null; ishaIntervalMinutes?: number }> = {
+  mwl: { fajr: 18, isha: 17 },
+  umm_al_qura: { fajr: 18.5, isha: null, ishaIntervalMinutes: 90 },
+  egyptian: { fajr: 19.5, isha: 17.5 },
+  karachi: { fajr: 18, isha: 18 },
+}
+
 function toRadians(deg: number) {
   return (deg * Math.PI) / 180
 }
@@ -82,25 +97,35 @@ function formatTime(hours: number): string {
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`
 }
 
-export function calculatePrayerTimes(lat: number, lng: number, date: Date): PrayerTimesData {
+export function calculatePrayerTimes(
+  lat: number,
+  lng: number,
+  date: Date,
+  options: PrayerCalculationOptions = {}
+): PrayerTimesData {
   const year = date.getFullYear()
   const month = date.getMonth() + 1
   const day = date.getDate()
 
   const jdate = julianDate(year, month, day) - lng / (15 * 24)
 
-  // Muslim World League method
-  const fajrAngle = 18
-  const ishaAngle = 17
+  const method = options.method ?? "mwl"
+  const madhhab = options.madhhab ?? "shafi"
+  const methodConfig = METHOD_ANGLES[method]
+  const fajrAngle = methodConfig.fajr
 
   const timezone = -date.getTimezoneOffset() / 60
 
   const fajr = sunAngleTime(fajrAngle, jdate, lat, true) + timezone
   const sunrise = sunAngleTime(0.833, jdate, lat, true) + timezone
   const dhuhr = 12 - equationOfTime(jdate) + timezone
-  const asr = asrTime(jdate, lat, 1) + timezone // Shafi'i method
+  const asrFactor = madhhab === "hanafi" ? 2 : 1
+  const asr = asrTime(jdate, lat, asrFactor) + timezone
   const maghrib = sunAngleTime(0.833, jdate, lat, false) + timezone
-  const isha = sunAngleTime(ishaAngle, jdate, lat, false) + timezone
+  const isha =
+    methodConfig.isha === null
+      ? maghrib + (methodConfig.ishaIntervalMinutes ?? 90) / 60
+      : sunAngleTime(methodConfig.isha, jdate, lat, false) + timezone
 
   return {
     fajr: formatTime(fajr),

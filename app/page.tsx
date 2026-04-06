@@ -1,26 +1,53 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import dynamic from "next/dynamic"
 import { LocaleProvider } from "@/components/locale-provider"
 import { Header } from "@/components/header"
 import { PrayerTimesCard } from "@/components/prayer-times-card"
 import { CountdownTimer } from "@/components/countdown-timer"
-import { QiblaCompass } from "@/components/qibla-compass"
-import { HijriCalendar } from "@/components/hijri-calendar"
-import { DailyVerse } from "@/components/daily-verse"
-import { PrayerTracker } from "@/components/prayer-tracker"
 import { LocationPicker } from "@/components/location-picker"
-import { MotivationCard } from "@/components/motivation-card"
 import { Footer } from "@/components/footer"
+import { PrayerPreferences } from "@/components/prayer-preferences"
 import {
   calculatePrayerTimes,
   calculateQibla,
+  getNextPrayer,
+  type PrayerCalculationOptions,
   type PrayerTimesData,
 } from "@/lib/prayer-times"
+
+const QiblaCompass = dynamic(() => import("@/components/qibla-compass").then((m) => m.QiblaCompass), {
+  loading: () => <div className="h-[320px] rounded-3xl glass-strong" aria-hidden="true" />,
+})
+const HijriCalendar = dynamic(() => import("@/components/hijri-calendar").then((m) => m.HijriCalendar), {
+  loading: () => <div className="h-[320px] rounded-3xl glass-strong" aria-hidden="true" />,
+})
+const DailyVerse = dynamic(() => import("@/components/daily-verse").then((m) => m.DailyVerse), {
+  loading: () => <div className="h-[320px] rounded-3xl glass-strong" aria-hidden="true" />,
+})
+const PrayerTracker = dynamic(() => import("@/components/prayer-tracker").then((m) => m.PrayerTracker), {
+  loading: () => <div className="h-[260px] rounded-3xl glass-strong" aria-hidden="true" />,
+})
+const MotivationCard = dynamic(() => import("@/components/motivation-card").then((m) => m.MotivationCard), {
+  loading: () => <div className="h-[260px] rounded-3xl glass-strong" aria-hidden="true" />,
+})
 
 const DEFAULT_LAT = 48.8566
 const DEFAULT_LNG = 2.3522
 const DEFAULT_CITY = "Paris, France"
+
+type AppPreferences = PrayerCalculationOptions & {
+  notificationsEnabled: boolean
+  reminderMinutes: number
+}
+
+const DEFAULT_PREFS: AppPreferences = {
+  method: "mwl",
+  madhhab: "shafi",
+  notificationsEnabled: false,
+  reminderMinutes: 10,
+}
 
 export default function PrayerTimesPage() {
   const [lat, setLat] = useState(DEFAULT_LAT)
@@ -30,20 +57,80 @@ export default function PrayerTimesPage() {
   const [qiblaDirection, setQiblaDirection] = useState(0)
   const [nextPrayer, setNextPrayer] = useState("")
   const [locationLoading, setLocationLoading] = useState(false)
+  const [locationError, setLocationError] = useState<string | null>(null)
+  const [prefs, setPrefs] = useState<AppPreferences>(DEFAULT_PREFS)
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     setMounted(true)
+    const savedPrefs = globalThis?.localStorage?.getItem?.("salati-preferences")
+    if (savedPrefs) {
+      try {
+        const parsed = JSON.parse(savedPrefs) as AppPreferences
+        setPrefs({ ...DEFAULT_PREFS, ...parsed })
+      } catch {
+        // Ignore invalid local data and keep defaults.
+      }
+    }
+
+    const savedLocation = globalThis?.localStorage?.getItem?.("salati-location")
+    if (savedLocation) {
+      try {
+        const parsed = JSON.parse(savedLocation) as { lat: number; lng: number; city: string }
+        if (Number.isFinite(parsed.lat) && Number.isFinite(parsed.lng) && parsed.city) {
+          setLat(parsed.lat)
+          setLng(parsed.lng)
+          setCity(parsed.city)
+        }
+      } catch {
+        // Ignore invalid local data and keep defaults.
+      }
+    }
   }, [])
 
   useEffect(() => {
-    const times = calculatePrayerTimes(lat, lng, new Date())
+    const times = calculatePrayerTimes(lat, lng, new Date(), prefs)
     setPrayerTimes(times)
     setQiblaDirection(calculateQibla(lat, lng))
-  }, [lat, lng])
+  }, [lat, lng, prefs])
+
+  useEffect(() => {
+    globalThis?.localStorage?.setItem?.("salati-preferences", JSON.stringify(prefs))
+  }, [prefs])
+
+  useEffect(() => {
+    globalThis?.localStorage?.setItem?.("salati-location", JSON.stringify({ lat, lng, city }))
+  }, [lat, lng, city])
+
+  useEffect(() => {
+    if (!prefs.notificationsEnabled || !prayerTimes || !("Notification" in globalThis)) return
+
+    if (Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {
+        // Browser blocked prompt.
+      })
+    }
+    if (Notification.permission !== "granted") return
+
+    const next = getNextPrayer(prayerTimes)
+    const notificationDelay = next.remainingMs - prefs.reminderMinutes * 60 * 1000
+    if (notificationDelay <= 0) return
+
+    const timeout = setTimeout(() => {
+      new Notification("Salati", {
+        body: `Upcoming prayer: ${next.name.toUpperCase()} at ${next.time}`,
+      })
+    }, notificationDelay)
+
+    return () => clearTimeout(timeout)
+  }, [prayerTimes, prefs.notificationsEnabled, prefs.reminderMinutes])
 
   const handleDetectLocation = useCallback(() => {
-    if (!navigator.geolocation) return
+    setLocationError(null)
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation is not available in this browser.")
+      return
+    }
     setLocationLoading(true)
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -55,6 +142,9 @@ export default function PrayerTimesPage() {
           const res = await fetch(
             `https://nominatim.openstreetmap.org/reverse?lat=${newLat}&lon=${newLng}&format=json`
           )
+          if (!res.ok) {
+            throw new Error("Reverse geocoding service is unavailable")
+          }
           const data = await res.json()
           const cityName =
             data.address?.city ||
@@ -66,10 +156,19 @@ export default function PrayerTimesPage() {
           setCity(`${cityName}, ${country}`)
         } catch {
           setCity(`${newLat.toFixed(2)}, ${newLng.toFixed(2)}`)
+          setLocationError("Location found, but city lookup failed. Showing coordinates instead.")
         }
         setLocationLoading(false)
       },
-      () => setLocationLoading(false)
+      (err) => {
+        setLocationLoading(false)
+        setLocationError(
+          err.code === err.PERMISSION_DENIED
+            ? "Location permission denied."
+            : "Unable to detect your location right now."
+        )
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
     )
   }, [])
 
@@ -104,7 +203,12 @@ export default function PrayerTimesPage() {
               city={city}
               onDetectLocation={handleDetectLocation}
               loading={locationLoading}
+              error={locationError}
             />
+          </div>
+
+          <div className="mb-10">
+            <PrayerPreferences value={prefs} onChange={setPrefs} />
           </div>
 
           {/* Main grid: Countdown + Prayer Times */}

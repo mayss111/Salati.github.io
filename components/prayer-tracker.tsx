@@ -6,17 +6,62 @@ import { Check, Target, Sparkles } from "lucide-react"
 
 const prayerKeys = ["fajr", "dhuhr", "asr", "maghrib", "isha"] as const
 
+function dayKey(date = new Date()) {
+  return date.toISOString().slice(0, 10)
+}
+
+type TrackerStore = {
+  day: string
+  completed: Record<string, boolean>
+  history: Record<string, number>
+}
+
 export function PrayerTracker() {
   const { t } = useLocale()
   const [completed, setCompleted] = useState<Record<string, boolean>>({})
   const [animate, setAnimate] = useState<string | null>(null)
+  const [history, setHistory] = useState<Record<string, number>>({})
 
   useEffect(() => {
+    const today = dayKey()
+    const raw = globalThis?.localStorage?.getItem?.("salati-prayer-tracker")
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as TrackerStore
+        if (parsed.day === today) {
+          setCompleted(parsed.completed ?? {})
+        }
+        setHistory(parsed.history ?? {})
+      } catch {
+        // Ignore corrupt local storage and fallback to defaults.
+      }
+    }
+
     const now = new Date()
     const msUntilMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime()
-    const timeout = setTimeout(() => setCompleted({}), msUntilMidnight)
+    const timeout = setTimeout(() => {
+      setCompleted({})
+    }, msUntilMidnight)
     return () => clearTimeout(timeout)
   }, [])
+
+  useEffect(() => {
+    const today = dayKey()
+    const completedCount = Object.values(completed).filter(Boolean).length
+    const nextHistory = { ...history, [today]: completedCount }
+    const last30Days = Object.entries(nextHistory)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-30)
+    const compactHistory = Object.fromEntries(last30Days)
+
+    globalThis?.localStorage?.setItem?.(
+      "salati-prayer-tracker",
+      JSON.stringify({ day: today, completed, history: compactHistory } satisfies TrackerStore)
+    )
+    setHistory(compactHistory)
+    // We intentionally exclude `history` to avoid a write loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completed])
 
   const togglePrayer = (key: string) => {
     const newVal = !completed[key]
@@ -31,6 +76,10 @@ export function PrayerTracker() {
   const totalPrayers = prayerKeys.length
   const percentage = Math.round((completedCount / totalPrayers) * 100)
   const allDone = completedCount === totalPrayers
+  const last7Days = Object.values(history).slice(-7)
+  const weeklyAverage = last7Days.length
+    ? (last7Days.reduce((acc, val) => acc + val, 0) / last7Days.length).toFixed(1)
+    : "0.0"
 
   const radius = 46
   const circumference = 2 * Math.PI * radius
@@ -99,6 +148,17 @@ export function PrayerTracker() {
 
       {/* Progress bar */}
       <div className="mt-6">
+        <div className="mb-3 grid grid-cols-2 gap-2">
+          <div className="rounded-xl bg-muted/10 px-3 py-2 text-center">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Today</p>
+            <p className="font-mono text-lg font-bold text-foreground">{completedCount}/{totalPrayers}</p>
+          </div>
+          <div className="rounded-xl bg-muted/10 px-3 py-2 text-center">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">7-day avg</p>
+            <p className="font-mono text-lg font-bold text-primary">{weeklyAverage}</p>
+          </div>
+        </div>
+
         <div className="mb-2 flex items-center justify-between text-xs">
           <span className="font-semibold text-muted-foreground">{t.prayerProgress}</span>
           <span className={`font-bold tabular-nums ${allDone ? "text-secondary" : "text-primary"}`}>{percentage}%</span>
